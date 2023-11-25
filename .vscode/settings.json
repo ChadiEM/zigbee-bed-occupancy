@@ -1,0 +1,14 @@
+{
+  "C_Cpp.intelliSenseEngine": "default",
+  "idf.adapterTargetName": "esp32c6",
+  "idf.openOcdConfigs": [
+    "board/esp32c6-ftdi.cfg"
+  ],
+  "files.associations": {
+    "esp_zigbee_ha_standard.h": "c",
+    "freertos.h": "c",
+    "nvs_flash.h": "c"
+  },
+  "idf.flashType": "UART",
+  "idf.port": "/dev/ttyUSB0"
+}

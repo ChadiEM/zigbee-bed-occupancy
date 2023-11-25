@@ -1,0 +1,59 @@
+-- Existing sdkconfig '/home/chadi/dev/sleep-mat-zigbee/HA_on_off_light/sdkconfig' renamed to '/home/chadi/dev/sleep-mat-zigbee/HA_on_off_light/sdkconfig.old'.
+-- Found Git: /usr/bin/git (found version "2.34.1") 
+-- The C compiler identification is GNU 12.2.0
+-- The CXX compiler identification is GNU 12.2.0
+-- The ASM compiler identification is GNU
+-- Found assembler: /home/chadi/.espressif/tools/riscv32-esp-elf/esp-12.2.0_20230208/riscv32-esp-elf/bin/riscv32-esp-elf-gcc
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /home/chadi/.espressif/tools/riscv32-esp-elf/esp-12.2.0_20230208/riscv32-esp-elf/bin/riscv32-esp-elf-gcc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /home/chadi/.espressif/tools/riscv32-esp-elf/esp-12.2.0_20230208/riscv32-esp-elf/bin/riscv32-esp-elf-g++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- git rev-parse returned 'fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).'
+-- Could not use 'git describe' to determine PROJECT_VER.
+-- Building ESP-IDF components for target esp32c6
+Processing 4 dependencies:
+[1/4] espressif/esp-zboss-lib (0.7.2)
+[2/4] espressif/esp-zigbee-lib (0.9.5)
+[3/4] espressif/led_strip (2.0.0)
+[4/4] idf (5.1.2)
+-- Project sdkconfig file /home/chadi/dev/sleep-mat-zigbee/HA_on_off_light/sdkconfig
+Loading defaults file /home/chadi/dev/sleep-mat-zigbee/HA_on_off_light/sdkconfig.defaults...
+-- Looking for sys/types.h
+-- Looking for sys/types.h - found
+-- Looking for stdint.h
+-- Looking for stdint.h - found
+-- Looking for stddef.h
+-- Looking for stddef.h - found
+-- Check size of time_t
+-- Check size of time_t - done
+-- Found Python3: /home/chadi/.espressif/python_env/idf5.1_py3.10_env/bin/python (found version "3.10.12") found components: Interpreter 
+-- Performing Test C_COMPILER_SUPPORTS_WFORMAT_SIGNEDNESS
+-- Performing Test C_COMPILER_SUPPORTS_WFORMAT_SIGNEDNESS - Success
+-- App "light_bulb" version: 1
+-- Adding linker script /home/chadi/dev/sleep-mat-zigbee/HA_on_off_light/build/esp-idf/esp_system/ld/memory.ld
+-- Adding linker script /home/chadi/esp/esp-idf/components/esp_system/ld/esp32c6/sections.ld.in
+-- Adding linker script /home/chadi/esp/esp-idf/components/esp_rom/esp32c6/ld/esp32c6.rom.ld
+-- Adding linker script /home/chadi/esp/esp-idf/components/esp_rom/esp32c6/ld/esp32c6.rom.api.ld
+-- Adding linker script /home/chadi/esp/esp-idf/components/esp_rom/esp32c6/ld/esp32c6.rom.rvfp.ld
+-- Adding linker script /home/chadi/esp/esp-idf/components/esp_rom/esp32c6/ld/esp32c6.rom.newlib.ld
+-- Adding linker script /home/chadi/esp/esp-idf/components/esp_rom/esp32c6/ld/esp32c6.rom.version.ld
+-- Adding linker script /home/chadi/esp/esp-idf/components/esp_rom/esp32c6/ld/esp32c6.rom.phy.ld
+-- Adding linker script /home/chadi/esp/esp-idf/components/esp_rom/esp32c6/ld/esp32c6.rom.coexist.ld
+-- Adding linker script /home/chadi/esp/esp-idf/components/esp_rom/esp32c6/ld/esp32c6.rom.net80211.ld
+-- Adding linker script /home/chadi/esp/esp-idf/components/esp_rom/esp32c6/ld/esp32c6.rom.pp.ld
+-- Adding linker script /home/chadi/esp/esp-idf/components/esp_rom/esp32c6/ld/esp32c6.rom.wdt.ld
+-- Adding linker script /home/chadi/esp/esp-idf/components/esp_rom/esp32c6/ld/esp32c6.rom.newlib-normal.ld
+-- Adding linker script /home/chadi/esp/esp-idf/components/esp_rom/esp32c6/ld/esp32c6.rom.heap.ld
+-- Adding linker script /home/chadi/esp/esp-idf/components/soc/esp32c6/ld/esp32c6.peripherals.ld
+-- Components: app_trace app_update bootloader bootloader_support bt cmock console cxx driver efuse esp-tls esp_adc esp_app_format esp_coex esp_common esp_eth esp_event esp_gdbstub esp_hid esp_http_client esp_http_server esp_https_ota esp_https_server esp_hw_support esp_lcd esp_local_ctrl esp_mm esp_netif esp_netif_stack esp_partition esp_phy esp_pm esp_psram esp_ringbuf esp_rom esp_system esp_timer esp_wifi espcoredump espressif__esp-zboss-lib espressif__esp-zigbee-lib espressif__led_strip esptool_py fatfs freertos hal heap http_parser idf_test ieee802154 json log lwip main mbedtls mqtt newlib nvs_flash openthread partition_table protobuf-c protocomm pthread riscv sdmmc soc spi_flash spiffs tcp_transport ulp unity usb vfs wear_levelling wifi_provisioning wpa_supplicant
+-- Component paths: /home/chadi/esp/esp-idf/components/app_trace /home/chadi/esp/esp-idf/components/app_update /home/chadi/esp/esp-idf/components/bootloader /home/chadi/esp/esp-idf/components/bootloader_support /home/chadi/esp/esp-idf/components/bt /home/chadi/esp/esp-idf/components/cmock /home/chadi/esp/esp-idf/components/console /home/chadi/esp/esp-idf/components/cxx /home/chadi/esp/esp-idf/components/driver /home/chadi/esp/esp-idf/components/efuse /home/chadi/esp/esp-idf/components/esp-tls /home/chadi/esp/esp-idf/components/esp_adc /home/chadi/esp/esp-idf/components/esp_app_format /home/chadi/esp/esp-idf/components/esp_coex /home/chadi/esp/esp-idf/components/esp_common /home/chadi/esp/esp-idf/components/esp_eth /home/chadi/esp/esp-idf/components/esp_event /home/chadi/esp/esp-idf/components/esp_gdbstub /home/chadi/esp/esp-idf/components/esp_hid /home/chadi/esp/esp-idf/components/esp_http_client /home/chadi/esp/esp-idf/components/esp_http_server /home/chadi/esp/esp-idf/components/esp_https_ota /home/chadi/esp/esp-idf/components/esp_https_server /home/chadi/esp/esp-idf/components/esp_hw_support /home/chadi/esp/esp-idf/components/esp_lcd /home/chadi/esp/esp-idf/components/esp_local_ctrl /home/chadi/esp/esp-idf/components/esp_mm /home/chadi/esp/esp-idf/components/esp_netif /home/chadi/esp/esp-idf/components/esp_netif_stack /home/chadi/esp/esp-idf/components/esp_partition /home/chadi/esp/esp-idf/components/esp_phy /home/chadi/esp/esp-idf/components/esp_pm /home/chadi/esp/esp-idf/components/esp_psram /home/chadi/esp/esp-idf/components/esp_ringbuf /home/chadi/esp/esp-idf/components/esp_rom /home/chadi/esp/esp-idf/components/esp_system /home/chadi/esp/esp-idf/components/esp_timer /home/chadi/esp/esp-idf/components/esp_wifi /home/chadi/esp/esp-idf/components/espcoredump /home/chadi/dev/sleep-mat-zigbee/HA_on_off_light/managed_components/espressif__esp-zboss-lib /home/chadi/dev/sleep-mat-zigbee/HA_on_off_light/managed_components/espressif__esp-zigbee-lib /home/chadi/dev/sleep-mat-zigbee/HA_on_off_light/managed_components/espressif__led_strip /home/chadi/esp/esp-idf/components/esptool_py /home/chadi/esp/esp-idf/components/fatfs /home/chadi/esp/esp-idf/components/freertos /home/chadi/esp/esp-idf/components/hal /home/chadi/esp/esp-idf/components/heap /home/chadi/esp/esp-idf/components/http_parser /home/chadi/esp/esp-idf/components/idf_test /home/chadi/esp/esp-idf/components/ieee802154 /home/chadi/esp/esp-idf/components/json /home/chadi/esp/esp-idf/components/log /home/chadi/esp/esp-idf/components/lwip /home/chadi/dev/sleep-mat-zigbee/HA_on_off_light/main /home/chadi/esp/esp-idf/components/mbedtls /home/chadi/esp/esp-idf/components/mqtt /home/chadi/esp/esp-idf/components/newlib /home/chadi/esp/esp-idf/components/nvs_flash /home/chadi/esp/esp-idf/components/openthread /home/chadi/esp/esp-idf/components/partition_table /home/chadi/esp/esp-idf/components/protobuf-c /home/chadi/esp/esp-idf/components/protocomm /home/chadi/esp/esp-idf/components/pthread /home/chadi/esp/esp-idf/components/riscv /home/chadi/esp/esp-idf/components/sdmmc /home/chadi/esp/esp-idf/components/soc /home/chadi/esp/esp-idf/components/spi_flash /home/chadi/esp/esp-idf/components/spiffs /home/chadi/esp/esp-idf/components/tcp_transport /home/chadi/esp/esp-idf/components/ulp /home/chadi/esp/esp-idf/components/unity /home/chadi/esp/esp-idf/components/usb /home/chadi/esp/esp-idf/components/vfs /home/chadi/esp/esp-idf/components/wear_levelling /home/chadi/esp/esp-idf/components/wifi_provisioning /home/chadi/esp/esp-idf/components/wpa_supplicant
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/chadi/dev/sleep-mat-zigbee/HA_on_off_light/build
