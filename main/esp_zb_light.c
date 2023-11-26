@@ -142,7 +142,8 @@ void sleep_mat_task(void *pvParameters)
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(handle, &cbs, NULL));
     ESP_ERROR_CHECK(adc_continuous_start(handle));
 
-    uint8_t gpio2_state = 2;
+    uint8_t gpio2_state = 0;
+    uint8_t gpio3_state = 1;
 
     while(1) {
 
@@ -172,8 +173,16 @@ void sleep_mat_task(void *pvParameters)
                         uint8_t state = data > THRESHOLD ? 1 : 0;
                         if (state != gpio2_state) {
                             gpio2_state = state;
-                            ESP_LOGI(TAG, "Button changed: %d (value=%"PRIu32")", state, data);
+                            ESP_LOGI(TAG, "GPIO2 Button changed: %d (value=%"PRIu32")", state, data);
                             reportAttribute(HA_ESP_LIGHT_ENDPOINT, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &state, 1);
+                        }
+                    }
+                    else if (chan_num == 3) {
+                        uint8_t state = data > THRESHOLD ? 1 : 0;
+                        if (state != gpio3_state) {
+                            gpio3_state = state;
+                            ESP_LOGI(TAG, "GPIO3 Button changed: %d (value=%"PRIu32")", state, data);
+                            reportAttribute(HA_ESP_LIGHT_ENDPOINT2, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &state, 1);
                         }
                     }
                 }                
@@ -184,6 +193,15 @@ void sleep_mat_task(void *pvParameters)
                  * usually you don't need this delay (as this task will block for a while).
                  */
                 // vTaskDelay(1);
+
+                // gpio2_state = 1 - gpio2_state;
+                // uint8_t statex = gpio2_state;
+                // reportAttribute(HA_ESP_LIGHT_ENDPOINT, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &statex, 1);
+
+                // gpio3_state = 1 - gpio3_state;
+                // uint8_t state = gpio3_state;
+                // reportAttribute(HA_ESP_LIGHT_ENDPOINT2, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &state, 1);
+
                  vTaskDelay(pdMS_TO_TICKS(250)); // Delay for 250 milliseconds 
             } else if (ret == ESP_ERR_TIMEOUT) {
                 //We try to read `EXAMPLE_READ_LEN` until API returns timeout, which means there's no available data
@@ -275,7 +293,7 @@ static void esp_zb_task(void *pvParameters)
     };
     esp_zb_attribute_list_t *esp_zb_identify_cluster = esp_zb_identify_cluster_create(&identify_cluster_cfg);
 
-    // ------------------------------ Cluster BINARY INPUT ------------------------------
+    // ------------------------------ Cluster BINARY INPUT 1 ------------------------------
     esp_zb_binary_input_cluster_cfg_t binary_input_cfg = {
         .out_of_service = 0,
         .status_flags = 0,
@@ -284,15 +302,28 @@ static void esp_zb_task(void *pvParameters)
     esp_zb_attribute_list_t *esp_zb_binary_input_cluster = esp_zb_binary_input_cluster_create(&binary_input_cfg);
     esp_zb_binary_input_cluster_add_attr(esp_zb_binary_input_cluster, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &present_value);
 
+    // ------------------------------ Cluster BINARY INPUT 2 ------------------------------
+    esp_zb_binary_input_cluster_cfg_t binary_input_cfg2 = {
+        .out_of_service = 0,
+        .status_flags = 0,
+    };
+    uint8_t present_value2 = 0;
+    esp_zb_attribute_list_t *esp_zb_binary_input_cluster2 = esp_zb_binary_input_cluster_create(&binary_input_cfg2);
+    esp_zb_binary_input_cluster_add_attr(esp_zb_binary_input_cluster2, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &present_value2);
+
     // ------------------------------ Create cluster list ------------------------------
     esp_zb_cluster_list_t *esp_zb_cluster_list = esp_zb_zcl_cluster_list_create();
     esp_zb_cluster_list_add_basic_cluster(esp_zb_cluster_list, esp_zb_basic_cluster, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
     esp_zb_cluster_list_add_identify_cluster(esp_zb_cluster_list, esp_zb_identify_cluster, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
     esp_zb_cluster_list_add_binary_input_cluster(esp_zb_cluster_list, esp_zb_binary_input_cluster, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
 
+    esp_zb_cluster_list_t *esp_zb_cluster_list2 = esp_zb_zcl_cluster_list_create();
+    esp_zb_cluster_list_add_binary_input_cluster(esp_zb_cluster_list2, esp_zb_binary_input_cluster2, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);    
+
     // ------------------------------ Create endpoint list ------------------------------
     esp_zb_ep_list_t *esp_zb_ep_list = esp_zb_ep_list_create();
     esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list, HA_ESP_LIGHT_ENDPOINT, ESP_ZB_AF_HA_PROFILE_ID, ESP_ZB_HA_ON_OFF_LIGHT_DEVICE_ID);
+    esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list2, HA_ESP_LIGHT_ENDPOINT2, ESP_ZB_AF_HA_PROFILE_ID, ESP_ZB_HA_ON_OFF_LIGHT_DEVICE_ID);
 
     /* Register device */
     esp_zb_device_register(esp_zb_ep_list);
