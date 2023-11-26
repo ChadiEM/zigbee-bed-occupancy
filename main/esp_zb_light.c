@@ -40,17 +40,40 @@
 #include "esp_check.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
-#include "ha/esp_zigbee_ha_standard.h"
 #include "esp_zb_light.h"
-
-#include "driver/gpio.h"
+#include "esp_adc/adc_continuous.h"
 #include "string.h"
 
 #if !defined ZB_ED_ROLE
 #error Define ZB_ED_ROLE in idf.py menuconfig to compile light (End Device) source code.
 #endif
 
+#define EXAMPLE_ADC_UNIT                    ADC_UNIT_1
+#define EXAMPLE_ADC_CONV_MODE               ADC_CONV_SINGLE_UNIT_1
+#define EXAMPLE_ADC_ATTEN                   ADC_ATTEN_DB_11
+#define EXAMPLE_ADC_BIT_WIDTH               SOC_ADC_DIGI_MAX_BITWIDTH
+#define EXAMPLE_ADC_OUTPUT_TYPE             ADC_DIGI_OUTPUT_FORMAT_TYPE2
+#define EXAMPLE_ADC_GET_CHANNEL(p_data)     ((p_data)->type2.channel)
+#define EXAMPLE_ADC_GET_DATA(p_data)        ((p_data)->type2.data)
+
+#define EXAMPLE_READ_LEN                    256
+
+#define THRESHOLD 1700
+
+//static adc_channel_t channel[2] = {ADC_CHANNEL_2, ADC_CHANNEL_3};
+static adc_channel_t channel[1] = {ADC_CHANNEL_2};
+
+static TaskHandle_t s_task_handle;
 static const char *TAG = "ESP_ZB_SLEEP_MAT";
+
+static bool IRAM_ATTR s_conv_done_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data)
+{
+    BaseType_t mustYield = pdFALSE;
+    //Notify that ADC continuous driver has done enough number of conversions
+    vTaskNotifyGiveFromISR(s_task_handle, &mustYield);
+
+    return (mustYield == pdTRUE);
+}
 
 void reportAttribute(uint8_t endpoint, uint16_t clusterID, uint16_t attributeID, void *value, uint8_t value_length)
 {
@@ -70,20 +93,107 @@ void reportAttribute(uint8_t endpoint, uint16_t clusterID, uint16_t attributeID,
     esp_zb_zcl_report_attr_cmd_req(&cmd);
 }
 
+
+static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_num, adc_continuous_handle_t *out_handle)
+{
+    adc_continuous_handle_t handle = NULL;
+
+    adc_continuous_handle_cfg_t adc_config = {
+        .max_store_buf_size = 1024,
+        .conv_frame_size = EXAMPLE_READ_LEN,
+    };
+    ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &handle));
+
+    adc_continuous_config_t dig_cfg = {
+        .sample_freq_hz = 20 * 1000,
+        .conv_mode = EXAMPLE_ADC_CONV_MODE,
+        .format = EXAMPLE_ADC_OUTPUT_TYPE,
+    };
+
+    adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX] = {0};
+    dig_cfg.pattern_num = channel_num;
+    for (int i = 0; i < channel_num; i++) {
+        adc_pattern[i].atten = EXAMPLE_ADC_ATTEN;
+        adc_pattern[i].channel = channel[i] & 0x7;
+        adc_pattern[i].unit = EXAMPLE_ADC_UNIT;
+        adc_pattern[i].bit_width = EXAMPLE_ADC_BIT_WIDTH;
+    }
+    dig_cfg.adc_pattern = adc_pattern;
+    ESP_ERROR_CHECK(adc_continuous_config(handle, &dig_cfg));
+
+    *out_handle = handle;
+}
+
 void sleep_mat_task(void *pvParameters)
 {
-    uint8_t last_state = 0;
-    while (1)
-    {
-        uint8_t button_state = 1 - gpio_get_level(GPIO_NUM_11);
-        if (button_state != last_state)
-        {
-            ESP_LOGI(TAG, "Button changed: %d", button_state);
-            last_state = button_state;
-            reportAttribute(HA_ESP_LIGHT_ENDPOINT, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &button_state, 1);
+    esp_err_t ret;
+    uint32_t ret_num = 0;
+    uint8_t result[EXAMPLE_READ_LEN] = {0};
+    memset(result, 0xcc, EXAMPLE_READ_LEN);
+
+    s_task_handle = xTaskGetCurrentTaskHandle();
+
+    adc_continuous_handle_t handle = NULL;
+    continuous_adc_init(channel, sizeof(channel) / sizeof(adc_channel_t), &handle);
+
+    adc_continuous_evt_cbs_t cbs = {
+        .on_conv_done = s_conv_done_cb,
+    };
+    ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(handle, &cbs, NULL));
+    ESP_ERROR_CHECK(adc_continuous_start(handle));
+
+    uint8_t gpio2_state = 2;
+
+    while(1) {
+
+        /**
+         * This is to show you the way to use the ADC continuous mode driver event callback.
+         * This `ulTaskNotifyTake` will block when the data processing in the task is fast.
+         * However in this example, the data processing (print) is slow, so you barely block here.
+         *
+         * Without using this event callback (to notify this task), you can still just call
+         * `adc_continuous_read()` here in a loop, with/without a certain block timeout.
+         */
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        while (1) {
+            ret = adc_continuous_read(handle, result, EXAMPLE_READ_LEN, &ret_num, 0);
+            if (ret == ESP_OK) {
+                // ESP_LOGI("TASK", "ret is %x, ret_num is %"PRIu32" bytes", ret, ret_num);
+                for (int i = 0; i < ret_num; i += SOC_ADC_DIGI_RESULT_BYTES) {
+                    adc_digi_output_data_t *p = (void*)&result[i];
+                    uint32_t chan_num = EXAMPLE_ADC_GET_CHANNEL(p);
+                    uint32_t data = EXAMPLE_ADC_GET_DATA(p);
+
+                    /* Check the channel number validation, the data is invalid if the channel num exceed the maximum channel */
+                    // ESP_LOGI(TAG, "Channel: %"PRIu32", Value: %"PRIx32, chan_num, data);
+
+                    if (chan_num == 2) {
+                        uint8_t state = data > THRESHOLD ? 1 : 0;
+                        if (state != gpio2_state) {
+                            gpio2_state = state;
+                            ESP_LOGI(TAG, "Button changed: %d (value=%"PRIu32")", state, data);
+                            reportAttribute(HA_ESP_LIGHT_ENDPOINT, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &state, 1);
+                        }
+                    }
+                }                
+
+                /**
+                 * Because printing is slow, so every time you call `ulTaskNotifyTake`, it will immediately return.
+                 * To avoid a task watchdog timeout, add a delay here. When you replace the way you process the data,
+                 * usually you don't need this delay (as this task will block for a while).
+                 */
+                // vTaskDelay(1);
+                 vTaskDelay(pdMS_TO_TICKS(250)); // Delay for 250 milliseconds 
+            } else if (ret == ESP_ERR_TIMEOUT) {
+                //We try to read `EXAMPLE_READ_LEN` until API returns timeout, which means there's no available data
+                break;
+            }
         }
-        vTaskDelay(100 / portTICK_PERIOD_MS);
     }
+
+    ESP_ERROR_CHECK(adc_continuous_stop(handle));
+    ESP_ERROR_CHECK(adc_continuous_deinit(handle));
 }
 
 
@@ -202,9 +312,4 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_zb_platform_config(&config));
 
     xTaskCreate(esp_zb_task, "Zigbee_main", 4096, NULL, 5, NULL);
-
-
-
-    gpio_set_direction(GPIO_NUM_11, GPIO_MODE_INPUT);
-    gpio_pullup_en(GPIO_NUM_11);
 }
