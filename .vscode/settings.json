@@ -7,7 +7,16 @@
   "files.associations": {
     "esp_zigbee_ha_standard.h": "c",
     "freertos.h": "c",
-    "nvs_flash.h": "c"
+    "nvs_flash.h": "c",
+    "*.inc": "c",
+    "esp_zb_light.h": "c",
+    "esp_zigbee_core.h": "c",
+    "esp_zigbee_zdo_command.h": "c",
+    "esp_zigbee_attribute.h": "c",
+    "esp_err.h": "c",
+    "esp_zigbee_type.h": "c",
+    "stdbool.h": "c",
+    "esp_zigbee_zcl_pm2_5_measurement.h": "c"
   },
   "idf.flashType": "UART",
   "idf.port": "/dev/ttyUSB0"

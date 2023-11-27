@@ -31,6 +31,16 @@ extern "C" {
 #include "esp_zigbee_zcl_pressure_meas.h"
 #include "esp_zigbee_zcl_occupancy_sensing.h"
 #include "esp_zigbee_zcl_window_covering.h"
+#include "esp_zigbee_zcl_thermostat.h"
+#include "esp_zigbee_zcl_fan_control.h"
+#include "esp_zigbee_zcl_thermostat_ui_config.h"
+#include "esp_zigbee_zcl_analog_input.h"
+#include "esp_zigbee_zcl_analog_output.h"
+#include "esp_zigbee_zcl_analog_value.h"
+#include "esp_zigbee_zcl_carbon_dioxide_measurement.h"
+#include "esp_zigbee_zcl_pm2_5_measurement.h"
+#include "esp_zigbee_zcl_multistate_value.h"
+#include "esp_zigbee_zcl_metering.h"
 
 /**
  * @brief Application Framework Profile identifiers.
@@ -140,13 +150,16 @@ typedef enum {
     ESP_ZB_ZCL_CLUSTER_ID_THERMOSTAT_UI_CONFIG  = 0x0204U,          /*!< Thermostat user interface configuration cluster identifier. */
     ESP_ZB_ZCL_CLUSTER_ID_COLOR_CONTROL         = 0x0300U,          /*!< Color control cluster identifier. */
     ESP_ZB_ZCL_CLUSTER_ID_BALLAST_CONFIG        = 0x0301U,          /*!< Ballast configuration cluster identifier. */
-    ESP_ZB_ZCL_CLUSTER_ID_ILLUMINANCE_MEASUREMENT  = 0x0400U,       /*!< Illuminance measurement */
-    ESP_ZB_ZCL_CLUSTER_ID_TEMP_MEASUREMENT         = 0x0402U,       /*!< Temperature measurement */
-    ESP_ZB_ZCL_CLUSTER_ID_PRESSURE_MEASUREMENT     = 0x0403U,       /*!< Pressure measurement */
-    ESP_ZB_ZCL_CLUSTER_ID_REL_HUMIDITY_MEASUREMENT = 0x0405U,       /*!< Relative humidity measurement */
-    ESP_ZB_ZCL_CLUSTER_ID_OCCUPANCY_SENSING        = 0x0406U,       /*!< Occupancy sensing */
-    ESP_ZB_ZCL_CLUSTER_ID_IAS_ZONE                 = 0x0500U,       /*!< IAS zone */
-    ESP_ZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT   = 0x0b04U,       /*!< Electrical measurement */
+    ESP_ZB_ZCL_CLUSTER_ID_ILLUMINANCE_MEASUREMENT    = 0x0400U,     /*!< Illuminance measurement */
+    ESP_ZB_ZCL_CLUSTER_ID_TEMP_MEASUREMENT           = 0x0402U,     /*!< Temperature measurement */
+    ESP_ZB_ZCL_CLUSTER_ID_PRESSURE_MEASUREMENT       = 0x0403U,     /*!< Pressure measurement */
+    ESP_ZB_ZCL_CLUSTER_ID_REL_HUMIDITY_MEASUREMENT   = 0x0405U,     /*!< Relative humidity measurement */
+    ESP_ZB_ZCL_CLUSTER_ID_OCCUPANCY_SENSING          = 0x0406U,     /*!< Occupancy sensing */
+    ESP_ZB_ZCL_CLUSTER_ID_CARBON_DIOXIDE_MEASUREMENT = 0x040dU,     /*!< Carbon dioxide measurement */
+    ESP_ZB_ZCL_CLUSTER_ID_PM2_5_MEASUREMENT          = 0x042aU,     /*!< PM2.5 measurement */
+    ESP_ZB_ZCL_CLUSTER_ID_IAS_ZONE                   = 0x0500U,     /*!< IAS zone */
+    ESP_ZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT     = 0x0b04U,     /*!< Electrical measurement */
+    ESP_ZB_ZCL_CLUSTER_ID_METERING                   = 0x0702U,     /*!< Metering */
 } esp_zb_zcl_cluster_id_t;
 
 /**
@@ -266,6 +279,28 @@ typedef enum {
     ESP_ZB_ZCL_ATTR_ACCESS_INTERNAL   = 0x40U,   /*!< Internal access only Attribute */
 } esp_zb_zcl_attr_access_t;
 
+/**
+ * @brief The ZCL attribute location information struct
+ *
+ */
+typedef struct esp_zb_zcl_attr_location_info_s {
+    uint8_t endpoint_id;                    /*!< The endpoint identifier on which the cluster id is resident. */
+    uint16_t cluster_id;                    /*!< The cluster identifier on which the attribute is resident, refer to esp_zb_zcl_cluster_id_t */
+    uint8_t cluster_role;                   /*!< The role of cluster, refer to esp_zb_zcl_cluster_role_t */
+    uint16_t manuf_code;                    /*!< The manufacturer code of attribute */
+    uint16_t attr_id;                       /*!< The attribute identifier */
+} esp_zb_zcl_attr_location_info_t;
+
+/**
+ * @brief Put the ZCL attribute value to specific memory
+ *
+ * @param data_ptr      A pointer of specific memory
+ * @param type          The data type of attribute value
+ * @param value         The value of attribute
+ * @param value_size    The size of attribute value
+ * @return              A pointer indicates the end location in specific memory after a value has been stored
+ */
+uint8_t *esp_zb_zcl_put_attribute_value(uint8_t *data_ptr, uint8_t type, uint8_t *value, uint16_t value_size);
 #ifdef __cplusplus
 }
 #endif
