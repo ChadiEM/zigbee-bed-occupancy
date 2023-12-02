@@ -41,24 +41,18 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "esp_zb_light.h"
-#include "esp_adc/adc_continuous.h"
 #include "string.h"
+#include "esp_adc/adc_oneshot.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
 
 #if !defined ZB_ED_ROLE
 #error Define ZB_ED_ROLE in idf.py menuconfig to compile light (End Device) source code.
 #endif
 
-#define EXAMPLE_ADC_UNIT                    ADC_UNIT_1
-#define EXAMPLE_ADC_CONV_MODE               ADC_CONV_SINGLE_UNIT_1
-#define EXAMPLE_ADC_ATTEN                   ADC_ATTEN_DB_11
-#define EXAMPLE_ADC_BIT_WIDTH               SOC_ADC_DIGI_MAX_BITWIDTH
-#define EXAMPLE_ADC_OUTPUT_TYPE             ADC_DIGI_OUTPUT_FORMAT_TYPE2
-#define EXAMPLE_ADC_GET_CHANNEL(p_data)     ((p_data)->type2.channel)
-#define EXAMPLE_ADC_GET_DATA(p_data)        ((p_data)->type2.data)
-
-#define EXAMPLE_READ_LEN                    256
-
-#define THRESHOLD 1700
+//ADC1 Channels
+#define EXAMPLE_ADC1_CHAN0          ADC_CHANNEL_2
+#define EXAMPLE_ADC1_CHAN1          ADC_CHANNEL_3
 
 //static adc_channel_t channel[2] = {ADC_CHANNEL_2, ADC_CHANNEL_3};
 static adc_channel_t channel[1] = {ADC_CHANNEL_2};
@@ -66,14 +60,10 @@ static adc_channel_t channel[1] = {ADC_CHANNEL_2};
 static TaskHandle_t s_task_handle;
 static const char *TAG = "ESP_ZB_SLEEP_MAT";
 
-static bool IRAM_ATTR s_conv_done_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data)
-{
-    BaseType_t mustYield = pdFALSE;
-    //Notify that ADC continuous driver has done enough number of conversions
-    vTaskNotifyGiveFromISR(s_task_handle, &mustYield);
-
-    return (mustYield == pdTRUE);
-}
+static int adc_raw[2][10];
+static int voltage[2][10];
+static bool example_adc_calibration_init(adc_unit_t unit, adc_channel_t channel, adc_atten_t atten, adc_cali_handle_t *out_handle);
+static void example_adc_calibration_deinit(adc_cali_handle_t handle);
 
 void reportAttribute(uint8_t endpoint, uint16_t clusterID, uint16_t attributeID, void *value, uint8_t value_length)
 {
@@ -93,125 +83,74 @@ void reportAttribute(uint8_t endpoint, uint16_t clusterID, uint16_t attributeID,
     esp_zb_zcl_report_attr_cmd_req(&cmd);
 }
 
-
-static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_num, adc_continuous_handle_t *out_handle)
-{
-    adc_continuous_handle_t handle = NULL;
-
-    adc_continuous_handle_cfg_t adc_config = {
-        .max_store_buf_size = 1024,
-        .conv_frame_size = EXAMPLE_READ_LEN,
-    };
-    ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &handle));
-
-    adc_continuous_config_t dig_cfg = {
-        .sample_freq_hz = 20 * 1000,
-        .conv_mode = EXAMPLE_ADC_CONV_MODE,
-        .format = EXAMPLE_ADC_OUTPUT_TYPE,
-    };
-
-    adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX] = {0};
-    dig_cfg.pattern_num = channel_num;
-    for (int i = 0; i < channel_num; i++) {
-        adc_pattern[i].atten = EXAMPLE_ADC_ATTEN;
-        adc_pattern[i].channel = channel[i] & 0x7;
-        adc_pattern[i].unit = EXAMPLE_ADC_UNIT;
-        adc_pattern[i].bit_width = EXAMPLE_ADC_BIT_WIDTH;
-    }
-    dig_cfg.adc_pattern = adc_pattern;
-    ESP_ERROR_CHECK(adc_continuous_config(handle, &dig_cfg));
-
-    *out_handle = handle;
-}
-
 void sleep_mat_task(void *pvParameters)
 {
-    esp_err_t ret;
-    uint32_t ret_num = 0;
-    uint8_t result[EXAMPLE_READ_LEN] = {0};
-    memset(result, 0xcc, EXAMPLE_READ_LEN);
-
-    s_task_handle = xTaskGetCurrentTaskHandle();
-
-    adc_continuous_handle_t handle = NULL;
-    continuous_adc_init(channel, sizeof(channel) / sizeof(adc_channel_t), &handle);
-
-    adc_continuous_evt_cbs_t cbs = {
-        .on_conv_done = s_conv_done_cb,
+   //-------------ADC1 Init---------------//
+    adc_oneshot_unit_handle_t adc1_handle;
+    adc_oneshot_unit_init_cfg_t init_config1 = {
+        .unit_id = ADC_UNIT_1,
     };
-    ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(handle, &cbs, NULL));
-    ESP_ERROR_CHECK(adc_continuous_start(handle));
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config1, &adc1_handle));
 
-    uint8_t gpio2_state = 0;
-    uint8_t gpio3_state = 1;
+    //-------------ADC1 Config---------------//
+    adc_oneshot_chan_cfg_t config = {
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+        .atten = ADC_ATTEN_DB_6,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN0, &config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN1, &config));
 
-    while(1) {
+    //-------------ADC1 Calibration Init---------------//
+    adc_cali_handle_t adc1_cali_chan0_handle = NULL;
+    adc_cali_handle_t adc1_cali_chan1_handle = NULL;
+    bool do_calibration1_chan0 = example_adc_calibration_init(ADC_UNIT_1, EXAMPLE_ADC1_CHAN0, ADC_ATTEN_DB_6, &adc1_cali_chan0_handle);
+    bool do_calibration1_chan1 = example_adc_calibration_init(ADC_UNIT_1, EXAMPLE_ADC1_CHAN1, ADC_ATTEN_DB_6, &adc1_cali_chan1_handle);
 
-        /**
-         * This is to show you the way to use the ADC continuous mode driver event callback.
-         * This `ulTaskNotifyTake` will block when the data processing in the task is fast.
-         * However in this example, the data processing (print) is slow, so you barely block here.
-         *
-         * Without using this event callback (to notify this task), you can still just call
-         * `adc_continuous_read()` here in a loop, with/without a certain block timeout.
-         */
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    uint16_t gpio2_state = 0;
+    uint8_t gpio3_state = 0;
 
-        while (1) {
-            ret = adc_continuous_read(handle, result, EXAMPLE_READ_LEN, &ret_num, 0);
-            if (ret == ESP_OK) {
-                // ESP_LOGI("TASK", "ret is %x, ret_num is %"PRIu32" bytes", ret, ret_num);
-                for (int i = 0; i < ret_num; i += SOC_ADC_DIGI_RESULT_BYTES) {
-                    adc_digi_output_data_t *p = (void*)&result[i];
-                    uint32_t chan_num = EXAMPLE_ADC_GET_CHANNEL(p);
-                    uint32_t data = EXAMPLE_ADC_GET_DATA(p);
+    while (1) {
+        ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN0, &adc_raw[0][0]));
+        ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN0, adc_raw[0][0]);
+        if (do_calibration1_chan0) {
+            ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_chan0_handle, adc_raw[0][0], &voltage[0][0]));
+            // ESP_LOGI(TAG, "ADC%d Channel[%d] Cali Voltage: %d mV", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN0, voltage[0][0]);
 
-                    /* Check the channel number validation, the data is invalid if the channel num exceed the maximum channel */
-                    // ESP_LOGI(TAG, "Channel: %"PRIu32", Value: %"PRIx32, chan_num, data);
-
-                    if (chan_num == 2) {
-                        uint8_t state = data > THRESHOLD ? 1 : 0;
-                        if (state != gpio2_state) {
-                            gpio2_state = state;
-                            ESP_LOGI(TAG, "GPIO2 Button changed: %d (value=%"PRIu32")", state, data);
-                            reportAttribute(HA_ESP_LIGHT_ENDPOINT, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &state, 1);
-                        }
-                    }
-                    else if (chan_num == 3) {
-                        uint8_t state = data > THRESHOLD ? 1 : 0;
-                        if (state != gpio3_state) {
-                            gpio3_state = state;
-                            ESP_LOGI(TAG, "GPIO3 Button changed: %d (value=%"PRIu32")", state, data);
-                            reportAttribute(HA_ESP_LIGHT_ENDPOINT2, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &state, 1);
-                        }
-                    }
-                }                
-
-                /**
-                 * Because printing is slow, so every time you call `ulTaskNotifyTake`, it will immediately return.
-                 * To avoid a task watchdog timeout, add a delay here. When you replace the way you process the data,
-                 * usually you don't need this delay (as this task will block for a while).
-                 */
-                // vTaskDelay(1);
-
-                // gpio2_state = 1 - gpio2_state;
-                // uint8_t statex = gpio2_state;
-                // reportAttribute(HA_ESP_LIGHT_ENDPOINT, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &statex, 1);
-
-                // gpio3_state = 1 - gpio3_state;
-                // uint8_t state = gpio3_state;
-                // reportAttribute(HA_ESP_LIGHT_ENDPOINT2, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &state, 1);
-
-                 vTaskDelay(pdMS_TO_TICKS(250)); // Delay for 250 milliseconds 
-            } else if (ret == ESP_ERR_TIMEOUT) {
-                //We try to read `EXAMPLE_READ_LEN` until API returns timeout, which means there's no available data
-                break;
+            int data = voltage[0][0];
+            if (data != gpio2_state) {
+                gpio2_state = data;
+                ESP_LOGI(TAG, "GPIO2 state changed: %"PRIu16"", data);
+                reportAttribute(HA_ESP_LIGHT_ENDPOINT, ESP_ZB_ZCL_CLUSTER_ID_TEMP_MEASUREMENT, ESP_ZB_ZCL_ATTR_TEMP_MEASUREMENT_VALUE_ID, &data, sizeof(data));
             }
         }
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN1, &adc_raw[0][1]));
+        ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN1, adc_raw[0][1]);
+        if (do_calibration1_chan1) {
+            ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_chan1_handle, adc_raw[0][1], &voltage[0][1]));
+            // ESP_LOGI(TAG, "ADC%d Channel[%d] Cali Voltage: %d mV", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN1, voltage[0][1]);
+
+            uint8_t data = voltage[0][1] > 250 ? 1 : 0;
+            if (data != gpio3_state) {
+                gpio3_state = data;
+                ESP_LOGI(TAG, "GPIO3 state changed: %"PRIu8"", data);
+                reportAttribute(HA_ESP_LIGHT_ENDPOINT2, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &data, sizeof(data));
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
-    ESP_ERROR_CHECK(adc_continuous_stop(handle));
-    ESP_ERROR_CHECK(adc_continuous_deinit(handle));
+
+    //Tear Down
+    ESP_ERROR_CHECK(adc_oneshot_del_unit(adc1_handle));
+    if (do_calibration1_chan0) {
+        example_adc_calibration_deinit(adc1_cali_chan0_handle);
+    }
+    if (do_calibration1_chan1) {
+        example_adc_calibration_deinit(adc1_cali_chan1_handle);
+    }
 }
 
 
@@ -278,7 +217,7 @@ static void esp_zb_task(void *pvParameters)
     uint32_t HWVersion = 0x0002;
     uint8_t ManufacturerName[] = {5, 'C', 'h', 'a', 'd', 'i'};
     uint8_t ModelIdentifier[] = {5, 'S', 'l', 'e', 'e', 'p'};
-    uint8_t DateCode[] = {8, '2', '0', '2', '3', '0', '9', '2', '6'};
+    uint8_t DateCode[] = {8, '2', '0', '2', '3', '1', '0', '2', '6'};
     esp_zb_attribute_list_t *esp_zb_basic_cluster = esp_zb_basic_cluster_create(&basic_cluster_cfg);
     esp_zb_basic_cluster_add_attr(esp_zb_basic_cluster, ESP_ZB_ZCL_ATTR_BASIC_APPLICATION_VERSION_ID, &ApplicationVersion);
     esp_zb_basic_cluster_add_attr(esp_zb_basic_cluster, ESP_ZB_ZCL_ATTR_BASIC_STACK_VERSION_ID, &StackVersion);
@@ -293,14 +232,15 @@ static void esp_zb_task(void *pvParameters)
     };
     esp_zb_attribute_list_t *esp_zb_identify_cluster = esp_zb_identify_cluster_create(&identify_cluster_cfg);
 
-    // ------------------------------ Cluster BINARY INPUT 1 ------------------------------
-    esp_zb_binary_input_cluster_cfg_t binary_input_cfg = {
-        .out_of_service = 0,
-        .status_flags = 0,
+    // ------------------------------ Cluster TEMP INPUT 1 ------------------------------
+    esp_zb_temperature_meas_cluster_cfg_t analog_input_cfg = {
+        .measured_value = 0,
+        .min_value = 0,
+        .max_value = 4096,
     };
-    uint8_t present_value = 0;
-    esp_zb_attribute_list_t *esp_zb_binary_input_cluster = esp_zb_binary_input_cluster_create(&binary_input_cfg);
-    esp_zb_binary_input_cluster_add_attr(esp_zb_binary_input_cluster, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &present_value);
+    uint16_t present_value_analog = 0;
+    esp_zb_attribute_list_t *esp_zb_analog_input_cluster = esp_zb_temperature_meas_cluster_create(&analog_input_cfg);
+    esp_zb_analog_input_cluster_add_attr(esp_zb_analog_input_cluster, ESP_ZB_ZCL_ATTR_TEMP_MEASUREMENT_VALUE_ID, &present_value_analog);
 
     // ------------------------------ Cluster BINARY INPUT 2 ------------------------------
     esp_zb_binary_input_cluster_cfg_t binary_input_cfg2 = {
@@ -315,15 +255,15 @@ static void esp_zb_task(void *pvParameters)
     esp_zb_cluster_list_t *esp_zb_cluster_list = esp_zb_zcl_cluster_list_create();
     esp_zb_cluster_list_add_basic_cluster(esp_zb_cluster_list, esp_zb_basic_cluster, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
     esp_zb_cluster_list_add_identify_cluster(esp_zb_cluster_list, esp_zb_identify_cluster, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
-    esp_zb_cluster_list_add_binary_input_cluster(esp_zb_cluster_list, esp_zb_binary_input_cluster, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
+    esp_zb_cluster_list_add_temperature_meas_cluster(esp_zb_cluster_list, esp_zb_analog_input_cluster, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
 
     esp_zb_cluster_list_t *esp_zb_cluster_list2 = esp_zb_zcl_cluster_list_create();
     esp_zb_cluster_list_add_binary_input_cluster(esp_zb_cluster_list2, esp_zb_binary_input_cluster2, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);    
 
     // ------------------------------ Create endpoint list ------------------------------
     esp_zb_ep_list_t *esp_zb_ep_list = esp_zb_ep_list_create();
-    esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list, HA_ESP_LIGHT_ENDPOINT, ESP_ZB_AF_HA_PROFILE_ID, ESP_ZB_HA_ON_OFF_LIGHT_DEVICE_ID);
-    esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list2, HA_ESP_LIGHT_ENDPOINT2, ESP_ZB_AF_HA_PROFILE_ID, ESP_ZB_HA_ON_OFF_LIGHT_DEVICE_ID);
+    esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list, HA_ESP_LIGHT_ENDPOINT, ESP_ZB_AF_HA_PROFILE_ID, ESP_ZB_HA_CUSTOM_ATTR_DEVICE_ID);
+    esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list2, HA_ESP_LIGHT_ENDPOINT2, ESP_ZB_AF_HA_PROFILE_ID, ESP_ZB_HA_CUSTOM_ATTR_DEVICE_ID);
 
     /* Register device */
     esp_zb_device_register(esp_zb_ep_list);
@@ -343,4 +283,46 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_zb_platform_config(&config));
 
     xTaskCreate(esp_zb_task, "Zigbee_main", 4096, NULL, 5, NULL);
+}
+
+/*---------------------------------------------------------------
+        ADC Calibration
+---------------------------------------------------------------*/
+static bool example_adc_calibration_init(adc_unit_t unit, adc_channel_t channel, adc_atten_t atten, adc_cali_handle_t *out_handle)
+{
+    adc_cali_handle_t handle = NULL;
+    esp_err_t ret = ESP_FAIL;
+    bool calibrated = false;
+
+    if (!calibrated) {
+        ESP_LOGI(TAG, "calibration scheme version is %s", "Curve Fitting");
+        adc_cali_curve_fitting_config_t cali_config = {
+            .unit_id = unit,
+            .chan = channel,
+            .atten = atten,
+            .bitwidth = ADC_BITWIDTH_DEFAULT,
+        };
+        ret = adc_cali_create_scheme_curve_fitting(&cali_config, &handle);
+        if (ret == ESP_OK) {
+            calibrated = true;
+        }
+    }
+
+
+    *out_handle = handle;
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Calibration Success");
+    } else if (ret == ESP_ERR_NOT_SUPPORTED || !calibrated) {
+        ESP_LOGW(TAG, "eFuse not burnt, skip software calibration");
+    } else {
+        ESP_LOGE(TAG, "Invalid arg or no memory");
+    }
+
+    return calibrated;
+}
+
+static void example_adc_calibration_deinit(adc_cali_handle_t handle)
+{
+    ESP_LOGI(TAG, "deregister %s calibration scheme", "Curve Fitting");
+    ESP_ERROR_CHECK(adc_cali_delete_scheme_curve_fitting(handle));
 }
