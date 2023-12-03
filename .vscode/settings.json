@@ -9,7 +9,7 @@
     "freertos.h": "c",
     "nvs_flash.h": "c",
     "*.inc": "c",
-    "esp_zb_light.h": "c",
+    "esp_zb_bed.h": "c",
     "esp_zigbee_core.h": "c",
     "esp_zigbee_zdo_command.h": "c",
     "esp_zigbee_attribute.h": "c",

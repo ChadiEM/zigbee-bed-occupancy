@@ -39,10 +39,10 @@
 
 /* Zigbee configuration */
 #define INSTALLCODE_POLICY_ENABLE       false    /* enable the install code policy for security */
-#define ED_AGING_TIMEOUT                ESP_ZB_ED_AGING_TIMEOUT_64MIN
+#define ED_AGING_TIMEOUT                ESP_ZB_ED_AGING_TIMEOUT_4MIN
 #define ED_KEEP_ALIVE                   3000    /* 3000 millisecond */
-#define HA_ESP_LIGHT_ENDPOINT           10    /* esp light bulb device endpoint, used to process light controlling commands */
-#define HA_ESP_LIGHT_ENDPOINT2           11
+#define HA_ESP_BED1_ENDPOINT            10    /* bed occupancy endpoint for side 1 of the bed */
+#define HA_ESP_BED2_ENDPOINT            11    /* bed occupancy endpoint for side 2 of the bed */
 #define ESP_ZB_PRIMARY_CHANNEL_MASK     ESP_ZB_TRANSCEIVER_ALL_CHANNELS_MASK  /* Zigbee primary channel mask use in the example */
 #define ESP_ZB_ZED_CONFIG()                                         \
     {                                                               \

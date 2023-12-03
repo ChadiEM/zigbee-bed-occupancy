@@ -40,7 +40,7 @@
 #include "esp_check.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
-#include "esp_zb_light.h"
+#include "esp_zb_bed.h"
 #include "string.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
@@ -54,12 +54,12 @@
 #define EXAMPLE_ADC1_CHAN0          ADC_CHANNEL_2
 #define EXAMPLE_ADC1_CHAN1          ADC_CHANNEL_3
 
-#define SLEEP_MAT_ATTEN ADC_ATTEN_DB_6
+#define PRESSURE_SENSOR_ATTEN       ADC_ATTEN_DB_6
 
 // static adc_channel_t channel[2] = {ADC_CHANNEL_2, ADC_CHANNEL_3};
 // static uint8_t channel_count = sizeof(channel) / sizeof(adc_channel_t);
 
-static const char *TAG = "ESP_ZB_SLEEP_MAT";
+static const char *TAG = "ESP_ZB_BED_OCCUPANCY";
 
 static bool example_adc_calibration_init(adc_unit_t unit, adc_channel_t channel, adc_atten_t atten, adc_cali_handle_t *out_handle);
 static void example_adc_calibration_deinit(adc_cali_handle_t handle);
@@ -94,7 +94,7 @@ void sleep_mat_task(void *pvParameters)
     //-------------ADC1 Config---------------//
     adc_oneshot_chan_cfg_t config = {
         .bitwidth = ADC_BITWIDTH_DEFAULT,
-        .atten = SLEEP_MAT_ATTEN,
+        .atten = PRESSURE_SENSOR_ATTEN,
     };
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN0, &config));
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN1, &config));
@@ -102,8 +102,8 @@ void sleep_mat_task(void *pvParameters)
     //-------------ADC1 Calibration Init---------------//
     adc_cali_handle_t adc1_cali_chan0_handle = NULL;
     adc_cali_handle_t adc1_cali_chan1_handle = NULL;
-    bool do_calibration1_chan0 = example_adc_calibration_init(ADC_UNIT_1, EXAMPLE_ADC1_CHAN0, SLEEP_MAT_ATTEN, &adc1_cali_chan0_handle);
-    bool do_calibration1_chan1 = example_adc_calibration_init(ADC_UNIT_1, EXAMPLE_ADC1_CHAN1, SLEEP_MAT_ATTEN, &adc1_cali_chan1_handle);
+    bool do_calibration1_chan0 = example_adc_calibration_init(ADC_UNIT_1, EXAMPLE_ADC1_CHAN0, PRESSURE_SENSOR_ATTEN, &adc1_cali_chan0_handle);
+    bool do_calibration1_chan1 = example_adc_calibration_init(ADC_UNIT_1, EXAMPLE_ADC1_CHAN1, PRESSURE_SENSOR_ATTEN, &adc1_cali_chan1_handle);
 
     int adc_raw[2][10];
     int voltage[2][10];
@@ -122,7 +122,7 @@ void sleep_mat_task(void *pvParameters)
             if (data != gpio2_state) {
                 gpio2_state = data;
                 // ESP_LOGI(TAG, "GPIO2 state changed: %"PRIu16"", data);
-                reportAttribute(HA_ESP_LIGHT_ENDPOINT, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &data, sizeof(data));
+                reportAttribute(HA_ESP_BED1_ENDPOINT, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &data, sizeof(data));
             }
         }
 
@@ -138,7 +138,7 @@ void sleep_mat_task(void *pvParameters)
             if (data != gpio3_state) {
                 gpio3_state = data;
                 // ESP_LOGI(TAG, "GPIO3 state changed: %"PRIu8"", data);
-                reportAttribute(HA_ESP_LIGHT_ENDPOINT2, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &data, sizeof(data));
+                reportAttribute(HA_ESP_BED2_ENDPOINT, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &data, sizeof(data));
             }
         }
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -263,8 +263,8 @@ static void esp_zb_task(void *pvParameters)
 
     // ------------------------------ Create endpoint list ------------------------------
     esp_zb_ep_list_t *esp_zb_ep_list = esp_zb_ep_list_create();
-    esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list, HA_ESP_LIGHT_ENDPOINT, ESP_ZB_AF_HA_PROFILE_ID, ESP_ZB_HA_CUSTOM_ATTR_DEVICE_ID);
-    esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list2, HA_ESP_LIGHT_ENDPOINT2, ESP_ZB_AF_HA_PROFILE_ID, ESP_ZB_HA_CUSTOM_ATTR_DEVICE_ID);
+    esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list, HA_ESP_BED1_ENDPOINT, ESP_ZB_AF_HA_PROFILE_ID, ESP_ZB_HA_CUSTOM_ATTR_DEVICE_ID);
+    esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list2, HA_ESP_BED2_ENDPOINT, ESP_ZB_AF_HA_PROFILE_ID, ESP_ZB_HA_CUSTOM_ATTR_DEVICE_ID);
 
     /* Register device */
     esp_zb_device_register(esp_zb_ep_list);
