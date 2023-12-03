@@ -16,7 +16,9 @@
     "esp_err.h": "c",
     "esp_zigbee_type.h": "c",
     "stdbool.h": "c",
-    "esp_zigbee_zcl_pm2_5_measurement.h": "c"
+    "esp_zigbee_zcl_pm2_5_measurement.h": "c",
+    "array": "c",
+    "string_view": "c"
   },
   "idf.flashType": "UART",
   "idf.port": "/dev/ttyUSB0"
