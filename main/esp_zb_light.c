@@ -54,6 +54,8 @@
 #define EXAMPLE_ADC1_CHAN0          ADC_CHANNEL_2
 #define EXAMPLE_ADC1_CHAN1          ADC_CHANNEL_3
 
+#define SLEEP_MAT_ATTEN ADC_ATTEN_DB_6
+
 //static adc_channel_t channel[2] = {ADC_CHANNEL_2, ADC_CHANNEL_3};
 static adc_channel_t channel[1] = {ADC_CHANNEL_2};
 
@@ -95,7 +97,7 @@ void sleep_mat_task(void *pvParameters)
     //-------------ADC1 Config---------------//
     adc_oneshot_chan_cfg_t config = {
         .bitwidth = ADC_BITWIDTH_DEFAULT,
-        .atten = ADC_ATTEN_DB_6,
+        .atten = SLEEP_MAT_ATTEN,
     };
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN0, &config));
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN1, &config));
@@ -103,10 +105,10 @@ void sleep_mat_task(void *pvParameters)
     //-------------ADC1 Calibration Init---------------//
     adc_cali_handle_t adc1_cali_chan0_handle = NULL;
     adc_cali_handle_t adc1_cali_chan1_handle = NULL;
-    bool do_calibration1_chan0 = example_adc_calibration_init(ADC_UNIT_1, EXAMPLE_ADC1_CHAN0, ADC_ATTEN_DB_6, &adc1_cali_chan0_handle);
-    bool do_calibration1_chan1 = example_adc_calibration_init(ADC_UNIT_1, EXAMPLE_ADC1_CHAN1, ADC_ATTEN_DB_6, &adc1_cali_chan1_handle);
+    bool do_calibration1_chan0 = example_adc_calibration_init(ADC_UNIT_1, EXAMPLE_ADC1_CHAN0, SLEEP_MAT_ATTEN, &adc1_cali_chan0_handle);
+    bool do_calibration1_chan1 = example_adc_calibration_init(ADC_UNIT_1, EXAMPLE_ADC1_CHAN1, SLEEP_MAT_ATTEN, &adc1_cali_chan1_handle);
 
-    uint16_t gpio2_state = 0;
+    uint8_t gpio2_state = 0;
     uint8_t gpio3_state = 0;
 
     while (1) {
@@ -116,11 +118,11 @@ void sleep_mat_task(void *pvParameters)
             ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_chan0_handle, adc_raw[0][0], &voltage[0][0]));
             // ESP_LOGI(TAG, "ADC%d Channel[%d] Cali Voltage: %d mV", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN0, voltage[0][0]);
 
-            int data = voltage[0][0];
+            uint8_t data = voltage[0][0] > 250 ? 1 : 0;
             if (data != gpio2_state) {
                 gpio2_state = data;
-                ESP_LOGI(TAG, "GPIO2 state changed: %"PRIu16"", data);
-                reportAttribute(HA_ESP_LIGHT_ENDPOINT, ESP_ZB_ZCL_CLUSTER_ID_TEMP_MEASUREMENT, ESP_ZB_ZCL_ATTR_TEMP_MEASUREMENT_VALUE_ID, &data, sizeof(data));
+                // ESP_LOGI(TAG, "GPIO2 state changed: %"PRIu16"", data);
+                reportAttribute(HA_ESP_LIGHT_ENDPOINT, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &data, sizeof(data));
             }
         }
 
@@ -135,7 +137,7 @@ void sleep_mat_task(void *pvParameters)
             uint8_t data = voltage[0][1] > 250 ? 1 : 0;
             if (data != gpio3_state) {
                 gpio3_state = data;
-                ESP_LOGI(TAG, "GPIO3 state changed: %"PRIu8"", data);
+                // ESP_LOGI(TAG, "GPIO3 state changed: %"PRIu8"", data);
                 reportAttribute(HA_ESP_LIGHT_ENDPOINT2, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &data, sizeof(data));
             }
         }
@@ -232,15 +234,14 @@ static void esp_zb_task(void *pvParameters)
     };
     esp_zb_attribute_list_t *esp_zb_identify_cluster = esp_zb_identify_cluster_create(&identify_cluster_cfg);
 
-    // ------------------------------ Cluster TEMP INPUT 1 ------------------------------
-    esp_zb_temperature_meas_cluster_cfg_t analog_input_cfg = {
-        .measured_value = 0,
-        .min_value = 0,
-        .max_value = 4096,
+    // ------------------------------ Cluster BINARY INPUT 1 ------------------------------
+    esp_zb_binary_input_cluster_cfg_t binary_input_cfg = {
+        .out_of_service = 0,
+        .status_flags = 0,
     };
-    uint16_t present_value_analog = 0;
-    esp_zb_attribute_list_t *esp_zb_analog_input_cluster = esp_zb_temperature_meas_cluster_create(&analog_input_cfg);
-    esp_zb_analog_input_cluster_add_attr(esp_zb_analog_input_cluster, ESP_ZB_ZCL_ATTR_TEMP_MEASUREMENT_VALUE_ID, &present_value_analog);
+    uint16_t present_value = 0;
+    esp_zb_attribute_list_t *esp_zb_binary_input_cluster = esp_zb_binary_input_cluster_create(&binary_input_cfg);
+    esp_zb_binary_input_cluster_add_attr(esp_zb_binary_input_cluster, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &present_value);
 
     // ------------------------------ Cluster BINARY INPUT 2 ------------------------------
     esp_zb_binary_input_cluster_cfg_t binary_input_cfg2 = {
@@ -255,7 +256,7 @@ static void esp_zb_task(void *pvParameters)
     esp_zb_cluster_list_t *esp_zb_cluster_list = esp_zb_zcl_cluster_list_create();
     esp_zb_cluster_list_add_basic_cluster(esp_zb_cluster_list, esp_zb_basic_cluster, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
     esp_zb_cluster_list_add_identify_cluster(esp_zb_cluster_list, esp_zb_identify_cluster, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
-    esp_zb_cluster_list_add_temperature_meas_cluster(esp_zb_cluster_list, esp_zb_analog_input_cluster, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
+    esp_zb_cluster_list_add_binary_input_cluster(esp_zb_cluster_list, esp_zb_binary_input_cluster, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
 
     esp_zb_cluster_list_t *esp_zb_cluster_list2 = esp_zb_zcl_cluster_list_create();
     esp_zb_cluster_list_add_binary_input_cluster(esp_zb_cluster_list2, esp_zb_binary_input_cluster2, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);    
