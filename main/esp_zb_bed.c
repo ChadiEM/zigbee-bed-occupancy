@@ -43,7 +43,7 @@ void reportAttribute(uint8_t endpoint, uint16_t clusterID, uint16_t attributeID,
     esp_zb_zcl_report_attr_cmd_req(&cmd);
 }
 
-void sleep_mat_task(void *pvParameters)
+void bed_occupancy_task(void *pvParameters)
 {
    //-------------ADC1 Init---------------//
     adc_oneshot_unit_handle_t adc1_handle;
@@ -141,7 +141,7 @@ void esp_zb_app_signal_handler(esp_zb_app_signal_t *signal_struct)
                      extended_pan_id[7], extended_pan_id[6], extended_pan_id[5], extended_pan_id[4],
                      extended_pan_id[3], extended_pan_id[2], extended_pan_id[1], extended_pan_id[0],
                      esp_zb_get_pan_id(), esp_zb_get_current_channel());
-            xTaskCreate(sleep_mat_task, "sleep_mat_task", 4096, NULL, 5, NULL);
+            xTaskCreate(bed_occupancy_task, "bed_occupancy_task", 4096, NULL, 5, NULL);
         } else {
             ESP_LOGI(TAG, "Network steering was not successful (status: %s)", esp_err_to_name(err_status));
             esp_zb_scheduler_alarm((esp_zb_callback_t)bdb_start_top_level_commissioning_cb, ESP_ZB_BDB_MODE_NETWORK_STEERING, 1000);
