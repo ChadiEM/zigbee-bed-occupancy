@@ -39,6 +39,9 @@ const definition = {
 
 module.exports = definition;
 ```
+Which shows up as this:
+
+![Zigbee2MQTT](docs/Zigbee2MQTT.png)
 
 ## Configure the project
 
