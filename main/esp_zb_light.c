@@ -56,14 +56,11 @@
 
 #define SLEEP_MAT_ATTEN ADC_ATTEN_DB_6
 
-//static adc_channel_t channel[2] = {ADC_CHANNEL_2, ADC_CHANNEL_3};
-static adc_channel_t channel[1] = {ADC_CHANNEL_2};
+// static adc_channel_t channel[2] = {ADC_CHANNEL_2, ADC_CHANNEL_3};
+// static uint8_t channel_count = sizeof(channel) / sizeof(adc_channel_t);
 
-static TaskHandle_t s_task_handle;
 static const char *TAG = "ESP_ZB_SLEEP_MAT";
 
-static int adc_raw[2][10];
-static int voltage[2][10];
 static bool example_adc_calibration_init(adc_unit_t unit, adc_channel_t channel, adc_atten_t atten, adc_cali_handle_t *out_handle);
 static void example_adc_calibration_deinit(adc_cali_handle_t handle);
 
@@ -107,6 +104,9 @@ void sleep_mat_task(void *pvParameters)
     adc_cali_handle_t adc1_cali_chan1_handle = NULL;
     bool do_calibration1_chan0 = example_adc_calibration_init(ADC_UNIT_1, EXAMPLE_ADC1_CHAN0, SLEEP_MAT_ATTEN, &adc1_cali_chan0_handle);
     bool do_calibration1_chan1 = example_adc_calibration_init(ADC_UNIT_1, EXAMPLE_ADC1_CHAN1, SLEEP_MAT_ATTEN, &adc1_cali_chan1_handle);
+
+    int adc_raw[2][10];
+    int voltage[2][10];
 
     uint8_t gpio2_state = 0;
     uint8_t gpio3_state = 0;
