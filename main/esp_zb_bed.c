@@ -69,17 +69,17 @@ void bed_occupancy_task(void *pvParameters)
     int adc_raw[2][10];
     int voltage[2][10];
 
-    uint8_t gpio2_state = 0;
-    uint8_t gpio3_state = 0;
+    uint8_t gpio2_state = 2;
+    uint8_t gpio3_state = 2;
 
     while (1) {
         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN0, &adc_raw[0][0]));
-        ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN0, adc_raw[0][0]);
+        // ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN0, adc_raw[0][0]);
         if (do_calibration1_chan0) {
             ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_chan0_handle, adc_raw[0][0], &voltage[0][0]));
             // ESP_LOGI(TAG, "ADC%d Channel[%d] Cali Voltage: %d mV", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN0, voltage[0][0]);
 
-            uint8_t data = voltage[0][0] > 250 ? 1 : 0;
+            uint8_t data = voltage[0][0] > 200 ? 1 : 0;
             if (data != gpio2_state) {
                 gpio2_state = data;
                 // ESP_LOGI(TAG, "GPIO2 state changed: %"PRIu16"", data);
@@ -90,12 +90,12 @@ void bed_occupancy_task(void *pvParameters)
         vTaskDelay(pdMS_TO_TICKS(1000));
 
         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN1, &adc_raw[0][1]));
-        ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN1, adc_raw[0][1]);
+        // ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN1, adc_raw[0][1]);
         if (do_calibration1_chan1) {
             ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_chan1_handle, adc_raw[0][1], &voltage[0][1]));
             // ESP_LOGI(TAG, "ADC%d Channel[%d] Cali Voltage: %d mV", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN1, voltage[0][1]);
 
-            uint8_t data = voltage[0][1] > 250 ? 1 : 0;
+            uint8_t data = voltage[0][1] > 200 ? 1 : 0;
             if (data != gpio3_state) {
                 gpio3_state = data;
                 // ESP_LOGI(TAG, "GPIO3 state changed: %"PRIu8"", data);
@@ -169,8 +169,8 @@ static void esp_zb_task(void *pvParameters)
     uint32_t StackVersion = 0x0002;
     uint32_t HWVersion = 0x0002;
     uint8_t ManufacturerName[] = {5, 'C', 'h', 'a', 'd', 'i'};
-    uint8_t ModelIdentifier[] = {5, 'S', 'l', 'e', 'e', 'p'};
-    uint8_t DateCode[] = {8, '2', '0', '2', '3', '1', '0', '2', '6'};
+    uint8_t ModelIdentifier[] = {13, 'B', 'e', 'd', ' ', 'O', 'c', 'c', 'u', 'p', 'a', 'n', 'c', 'y'};
+    uint8_t DateCode[] = {8, '2', '0', '2', '3', '1', '2', '0', '2'};
     esp_zb_attribute_list_t *esp_zb_basic_cluster = esp_zb_basic_cluster_create(&basic_cluster_cfg);
     esp_zb_basic_cluster_add_attr(esp_zb_basic_cluster, ESP_ZB_ZCL_ATTR_BASIC_APPLICATION_VERSION_ID, &ApplicationVersion);
     esp_zb_basic_cluster_add_attr(esp_zb_basic_cluster, ESP_ZB_ZCL_ATTR_BASIC_STACK_VERSION_ID, &StackVersion);
@@ -246,7 +246,6 @@ static bool example_adc_calibration_init(adc_unit_t unit, adc_channel_t channel,
     esp_err_t ret = ESP_FAIL;
     bool calibrated = false;
 
-    ESP_LOGI(TAG, "calibration scheme version is %s", "Curve Fitting");
     adc_cali_curve_fitting_config_t cali_config = {
         .unit_id = unit,
         .chan = channel,

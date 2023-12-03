@@ -2,7 +2,9 @@
 
 Handles bed occupancy on two sides of the bed using two SF15-600 pressure sensors.
 
-Uses ADC channels 2 and 3 to read the voltage and decide whether that side of the bed is occupied. 
+Uses ADC channels 2 and 3 to read the voltage and decide whether that side of the bed is occupied.
+
+![Schematic](docs/Schematic_ESP32-C6-Bed-Occupancy.png)
 
 ## Configure the project
 
