@@ -8,22 +8,24 @@
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 
-#if !defined ZB_ED_ROLE
-#error Define ZB_ED_ROLE in idf.py menuconfig to compile light (End Device) source code.
-#endif
+typedef struct channel_definition {
+    adc_channel_t channel;
+    endpoint_t endpoint;
+    uint16_t threshold;
+} channel_definition;
 
-//ADC1 Channels
-#define EXAMPLE_ADC1_CHAN0          ADC_CHANNEL_2
-#define EXAMPLE_ADC1_CHAN1          ADC_CHANNEL_3
+// Voltage threshold for triggering an occupied alert (in mV)
+static const uint16_t THRESHOLD = 175;
 
-#define PRESSURE_SENSOR_ATTEN       ADC_ATTEN_DB_6
+// Define channels and endpoints here
+channel_definition channel_definitions[] = {{.channel = ADC_CHANNEL_2, .endpoint = ENDPOINT_BED_SIDE1, .threshold = THRESHOLD},
+                                            {.channel = ADC_CHANNEL_3, .endpoint = ENDPOINT_BED_SIDE2, .threshold = THRESHOLD}};
 
-// static adc_channel_t channel[2] = {ADC_CHANNEL_2, ADC_CHANNEL_3};
-// static uint8_t channel_count = sizeof(channel) / sizeof(adc_channel_t);
+static const uint8_t channel_definitions_size = sizeof(channel_definitions) / sizeof(channel_definition);
 
 static const char *TAG = "ESP_ZB_BED_OCCUPANCY";
 
-static bool example_adc_calibration_init(adc_unit_t unit, adc_channel_t channel, adc_atten_t atten, adc_cali_handle_t *out_handle);
+static bool adc_calibration_init(adc_channel_t channel, adc_cali_handle_t *out_handle);
 
 void reportAttribute(uint8_t endpoint, uint16_t clusterID, uint16_t attributeID, void *value, uint8_t value_length)
 {
@@ -57,55 +59,48 @@ void bed_occupancy_task(void *pvParameters)
         .bitwidth = ADC_BITWIDTH_DEFAULT,
         .atten = PRESSURE_SENSOR_ATTEN,
     };
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN0, &config));
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN1, &config));
+
+    for (int i = 0; i < channel_definitions_size; i++) {
+        ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, channel_definitions[i].channel, &config));
+    }
 
     //-------------ADC1 Calibration Init---------------//
-    adc_cali_handle_t adc1_cali_chan0_handle = NULL;
-    adc_cali_handle_t adc1_cali_chan1_handle = NULL;
-    bool do_calibration1_chan0 = example_adc_calibration_init(ADC_UNIT_1, EXAMPLE_ADC1_CHAN0, PRESSURE_SENSOR_ATTEN, &adc1_cali_chan0_handle);
-    bool do_calibration1_chan1 = example_adc_calibration_init(ADC_UNIT_1, EXAMPLE_ADC1_CHAN1, PRESSURE_SENSOR_ATTEN, &adc1_cali_chan1_handle);
+    adc_cali_handle_t adc1_cali_handle[channel_definitions_size];
+    bool do_calibration[channel_definitions_size];
 
-    int adc_raw[2][10];
-    int voltage[2][10];
+    for (int i = 0; i < channel_definitions_size; i++) {
+        do_calibration[i] = adc_calibration_init(channel_definitions[i].channel, &adc1_cali_handle[i]);
+    }
 
-    uint8_t gpio2_state = 2;
-    uint8_t gpio3_state = 2;
+    uint8_t gpio_state[channel_definitions_size];
+    for (int i = 0; i < channel_definitions_size; i++) {
+        gpio_state[i] = 2;
+    }
+
+    int adc_raw[10];
+    int voltage[10];
 
     while (1) {
-        ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN0, &adc_raw[0][0]));
-        // ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN0, adc_raw[0][0]);
-        if (do_calibration1_chan0) {
-            ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_chan0_handle, adc_raw[0][0], &voltage[0][0]));
-            // ESP_LOGI(TAG, "ADC%d Channel[%d] Cali Voltage: %d mV", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN0, voltage[0][0]);
+        for (int i = 0; i < channel_definitions_size; i++) {
 
-            uint8_t data = voltage[0][0] > 200 ? 1 : 0;
-            if (data != gpio2_state) {
-                gpio2_state = data;
-                // ESP_LOGI(TAG, "GPIO2 state changed: %"PRIu16"", data);
-                reportAttribute(HA_ESP_BED1_ENDPOINT, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &data, sizeof(data));
+            ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, channel_definitions[i].channel, &adc_raw[0]));
+            // ESP_LOGI(TAG, "Channel[%d] Raw Data: %d", channel_definitions[i].channel, adc_raw[0]);
+            if (do_calibration[i]) {
+                ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_handle[i], adc_raw[0], &voltage[0]));
+                // ESP_LOGI(TAG, "Channel[%d] Cali Voltage: %d mV", channel_definitions[i].channel, voltage[0]);
+
+                uint8_t data = voltage[0] > channel_definitions[i].threshold ? 1 : 0;
+
+                if (data != gpio_state[i]) {
+                    gpio_state[i] = data;
+                    reportAttribute(channel_definitions[i].endpoint, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT,
+                                    ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &data, sizeof(data));
+                }
             }
+            vTaskDelay(pdMS_TO_TICKS(1000));
         }
-
-        vTaskDelay(pdMS_TO_TICKS(1000));
-
-        ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN1, &adc_raw[0][1]));
-        // ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN1, adc_raw[0][1]);
-        if (do_calibration1_chan1) {
-            ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_chan1_handle, adc_raw[0][1], &voltage[0][1]));
-            // ESP_LOGI(TAG, "ADC%d Channel[%d] Cali Voltage: %d mV", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN1, voltage[0][1]);
-
-            uint8_t data = voltage[0][1] > 200 ? 1 : 0;
-            if (data != gpio3_state) {
-                gpio3_state = data;
-                // ESP_LOGI(TAG, "GPIO3 state changed: %"PRIu8"", data);
-                reportAttribute(HA_ESP_BED2_ENDPOINT, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &data, sizeof(data));
-            }
-        }
-        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
-
 
 /********************* Define functions **************************/
 static void bdb_start_top_level_commissioning_cb(uint8_t mode_mask)
@@ -168,16 +163,15 @@ static void esp_zb_task(void *pvParameters)
     uint32_t ApplicationVersion = 0x0001;
     uint32_t StackVersion = 0x0002;
     uint32_t HWVersion = 0x0002;
-    uint8_t ManufacturerName[] = {5, 'C', 'h', 'a', 'd', 'i'};
+    uint8_t ManufacturerName[] = {9, 'E', 's', 'p', 'r', 'e', 's', 's', 'i', 'f'};
     uint8_t ModelIdentifier[] = {13, 'B', 'e', 'd', ' ', 'O', 'c', 'c', 'u', 'p', 'a', 'n', 'c', 'y'};
-    uint8_t DateCode[] = {8, '2', '0', '2', '3', '1', '2', '0', '2'};
     esp_zb_attribute_list_t *esp_zb_basic_cluster = esp_zb_basic_cluster_create(&basic_cluster_cfg);
     esp_zb_basic_cluster_add_attr(esp_zb_basic_cluster, ESP_ZB_ZCL_ATTR_BASIC_APPLICATION_VERSION_ID, &ApplicationVersion);
     esp_zb_basic_cluster_add_attr(esp_zb_basic_cluster, ESP_ZB_ZCL_ATTR_BASIC_STACK_VERSION_ID, &StackVersion);
     esp_zb_basic_cluster_add_attr(esp_zb_basic_cluster, ESP_ZB_ZCL_ATTR_BASIC_HW_VERSION_ID, &HWVersion);
     esp_zb_basic_cluster_add_attr(esp_zb_basic_cluster, ESP_ZB_ZCL_ATTR_BASIC_MANUFACTURER_NAME_ID, ManufacturerName);
     esp_zb_basic_cluster_add_attr(esp_zb_basic_cluster, ESP_ZB_ZCL_ATTR_BASIC_MODEL_IDENTIFIER_ID, ModelIdentifier);
-    esp_zb_basic_cluster_add_attr(esp_zb_basic_cluster, ESP_ZB_ZCL_ATTR_BASIC_DATE_CODE_ID, DateCode);
+    esp_zb_basic_cluster_add_attr(esp_zb_basic_cluster, ESP_ZB_ZCL_ATTR_BASIC_DATE_CODE_ID, date_code);
 
     // ------------------------------ Cluster IDENTIFY ------------------------------
     esp_zb_identify_cluster_cfg_t identify_cluster_cfg = {
@@ -185,37 +179,35 @@ static void esp_zb_task(void *pvParameters)
     };
     esp_zb_attribute_list_t *esp_zb_identify_cluster = esp_zb_identify_cluster_create(&identify_cluster_cfg);
 
-    // ------------------------------ Cluster BINARY INPUT 1 ------------------------------
-    esp_zb_binary_input_cluster_cfg_t binary_input_cfg = {
-        .out_of_service = 0,
-        .status_flags = 0,
-    };
-    uint16_t present_value = 0;
-    esp_zb_attribute_list_t *esp_zb_binary_input_cluster = esp_zb_binary_input_cluster_create(&binary_input_cfg);
-    esp_zb_binary_input_cluster_add_attr(esp_zb_binary_input_cluster, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &present_value);
+    esp_zb_attribute_list_t *esp_zb_binary_input_clusters[channel_definitions_size];
+    for (int i = 0; i < channel_definitions_size; i++) {
+        esp_zb_binary_input_cluster_cfg_t binary_input_cfg = {
+                .out_of_service = 0,
+                .status_flags = 0,
+        };
+        uint8_t present_value = 0;
+        esp_zb_attribute_list_t *esp_zb_binary_input_cluster = esp_zb_binary_input_cluster_create(&binary_input_cfg);
+        esp_zb_binary_input_cluster_add_attr(esp_zb_binary_input_cluster, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &present_value);
 
-    // ------------------------------ Cluster BINARY INPUT 2 ------------------------------
-    esp_zb_binary_input_cluster_cfg_t binary_input_cfg2 = {
-        .out_of_service = 0,
-        .status_flags = 0,
-    };
-    uint8_t present_value2 = 0;
-    esp_zb_attribute_list_t *esp_zb_binary_input_cluster2 = esp_zb_binary_input_cluster_create(&binary_input_cfg2);
-    esp_zb_binary_input_cluster_add_attr(esp_zb_binary_input_cluster2, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &present_value2);
+        esp_zb_binary_input_clusters[i] = esp_zb_binary_input_cluster;
+    }
+
+    // ------------------------------ Create endpoint list ------------------------------
+    esp_zb_ep_list_t *esp_zb_ep_list = esp_zb_ep_list_create();
 
     // ------------------------------ Create cluster list ------------------------------
     esp_zb_cluster_list_t *esp_zb_cluster_list = esp_zb_zcl_cluster_list_create();
     esp_zb_cluster_list_add_basic_cluster(esp_zb_cluster_list, esp_zb_basic_cluster, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
     esp_zb_cluster_list_add_identify_cluster(esp_zb_cluster_list, esp_zb_identify_cluster, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
-    esp_zb_cluster_list_add_binary_input_cluster(esp_zb_cluster_list, esp_zb_binary_input_cluster, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
 
-    esp_zb_cluster_list_t *esp_zb_cluster_list2 = esp_zb_zcl_cluster_list_create();
-    esp_zb_cluster_list_add_binary_input_cluster(esp_zb_cluster_list2, esp_zb_binary_input_cluster2, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);    
+    esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list, ENDPOINT_INIT, ESP_ZB_AF_HA_PROFILE_ID, ESP_ZB_HA_CUSTOM_ATTR_DEVICE_ID);
 
-    // ------------------------------ Create endpoint list ------------------------------
-    esp_zb_ep_list_t *esp_zb_ep_list = esp_zb_ep_list_create();
-    esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list, HA_ESP_BED1_ENDPOINT, ESP_ZB_AF_HA_PROFILE_ID, ESP_ZB_HA_CUSTOM_ATTR_DEVICE_ID);
-    esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list2, HA_ESP_BED2_ENDPOINT, ESP_ZB_AF_HA_PROFILE_ID, ESP_ZB_HA_CUSTOM_ATTR_DEVICE_ID);
+    for (int i = 0; i < channel_definitions_size; i++) {
+        esp_zb_cluster_list_t *esp_zb_cluster_list = esp_zb_zcl_cluster_list_create();
+        esp_zb_cluster_list_add_binary_input_cluster(esp_zb_cluster_list, esp_zb_binary_input_clusters[i], ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
+
+        esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list, channel_definitions[i].endpoint, ESP_ZB_AF_HA_PROFILE_ID, ESP_ZB_HA_CUSTOM_ATTR_DEVICE_ID);
+    }
 
     /* Register device */
     esp_zb_device_register(esp_zb_ep_list);
@@ -240,16 +232,16 @@ void app_main(void)
 /*---------------------------------------------------------------
         ADC Calibration
 ---------------------------------------------------------------*/
-static bool example_adc_calibration_init(adc_unit_t unit, adc_channel_t channel, adc_atten_t atten, adc_cali_handle_t *out_handle)
+static bool adc_calibration_init(adc_channel_t channel, adc_cali_handle_t *out_handle)
 {
     adc_cali_handle_t handle = NULL;
     esp_err_t ret = ESP_FAIL;
     bool calibrated = false;
 
     adc_cali_curve_fitting_config_t cali_config = {
-        .unit_id = unit,
+        .unit_id = ADC_UNIT_1,
         .chan = channel,
-        .atten = atten,
+        .atten = PRESSURE_SENSOR_ATTEN,
         .bitwidth = ADC_BITWIDTH_DEFAULT,
     };
     ret = adc_cali_create_scheme_curve_fitting(&cali_config, &handle);
@@ -260,7 +252,7 @@ static bool example_adc_calibration_init(adc_unit_t unit, adc_channel_t channel,
     *out_handle = handle;
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "Calibration Success");
-    } else if (ret == ESP_ERR_NOT_SUPPORTED || !calibrated) {
+    } else if (ret == ESP_ERR_NOT_SUPPORTED) {
         ESP_LOGW(TAG, "eFuse not burnt, skip software calibration");
     } else {
         ESP_LOGE(TAG, "Invalid arg or no memory");
