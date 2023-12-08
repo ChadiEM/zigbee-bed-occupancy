@@ -14,10 +14,10 @@ const e = exposes.presets;
 const utils = require('zigbee-herdsman-converters/lib/utils');
 
 const definition = {
-    zigbeeModel: ['Sleep'],
-    model: 'Sleep',
-    vendor: 'Chadi',
-    description: 'Bed occupancy',
+    zigbeeModel: ['Bed Occupancy'],
+    model: 'Bed Occupancy',
+    vendor: 'Espressif',
+    description: 'Bed occupancy sensors',
     fromZigbee: [{
         cluster: 'genBinaryInput',
         type: 'attributeReport',
