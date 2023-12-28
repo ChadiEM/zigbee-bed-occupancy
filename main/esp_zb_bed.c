@@ -11,15 +11,11 @@
 typedef struct channel_definition {
     adc_channel_t channel;
     endpoint_t endpoint;
-    uint16_t threshold;
 } channel_definition;
 
-// Voltage threshold for triggering an occupied alert (in mV)
-static const uint16_t THRESHOLD = 175;
-
 // Define channels and endpoints here
-channel_definition channel_definitions[] = {{.channel = ADC_CHANNEL_2, .endpoint = ENDPOINT_BED_SIDE1, .threshold = THRESHOLD},
-                                            {.channel = ADC_CHANNEL_3, .endpoint = ENDPOINT_BED_SIDE2, .threshold = THRESHOLD}};
+channel_definition channel_definitions[] = {{.channel = ADC_CHANNEL_2, .endpoint = ENDPOINT_BED_SIDE1},
+                                            {.channel = ADC_CHANNEL_3, .endpoint = ENDPOINT_BED_SIDE2}};
 
 static const uint8_t channel_definitions_size = sizeof(channel_definitions) / sizeof(channel_definition);
 
@@ -72,9 +68,9 @@ void bed_occupancy_task(void *pvParameters)
         do_calibration[i] = adc_calibration_init(channel_definitions[i].channel, &adc1_cali_handle[i]);
     }
 
-    uint8_t gpio_state[channel_definitions_size];
+    uint16_t gpio_state[channel_definitions_size];
     for (int i = 0; i < channel_definitions_size; i++) {
-        gpio_state[i] = 2;
+        gpio_state[i] = 0x8000;
     }
 
     int adc_raw[10];
@@ -82,19 +78,18 @@ void bed_occupancy_task(void *pvParameters)
 
     while (1) {
         for (int i = 0; i < channel_definitions_size; i++) {
-
             ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, channel_definitions[i].channel, &adc_raw[0]));
             // ESP_LOGI(TAG, "Channel[%d] Raw Data: %d", channel_definitions[i].channel, adc_raw[0]);
             if (do_calibration[i]) {
                 ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_handle[i], adc_raw[0], &voltage[0]));
                 // ESP_LOGI(TAG, "Channel[%d] Cali Voltage: %d mV", channel_definitions[i].channel, voltage[0]);
 
-                uint8_t data = voltage[0] > channel_definitions[i].threshold ? 1 : 0;
+                uint16_t data = voltage[0];
 
                 if (data != gpio_state[i]) {
                     gpio_state[i] = data;
-                    reportAttribute(channel_definitions[i].endpoint, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT,
-                                    ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &data, sizeof(data));
+                    reportAttribute(channel_definitions[i].endpoint, ESP_ZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT,
+                                    ESP_ZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_DC_VOLTAGE_ID, &data, sizeof(data));
                 }
             }
             vTaskDelay(pdMS_TO_TICKS(1000));
@@ -179,17 +174,18 @@ static void esp_zb_task(void *pvParameters)
     };
     esp_zb_attribute_list_t *esp_zb_identify_cluster = esp_zb_identify_cluster_create(&identify_cluster_cfg);
 
-    esp_zb_attribute_list_t *esp_zb_binary_input_clusters[channel_definitions_size];
+    esp_zb_attribute_list_t *esp_zb_electrical_meas_clusters[channel_definitions_size];
     for (int i = 0; i < channel_definitions_size; i++) {
-        esp_zb_binary_input_cluster_cfg_t binary_input_cfg = {
-                .out_of_service = 0,
-                .status_flags = 0,
+        esp_zb_electrical_meas_cluster_cfg_t electrical_meas_cfg = {
+                .measured_type = 32,
         };
-        uint8_t present_value = 0;
-        esp_zb_attribute_list_t *esp_zb_binary_input_cluster = esp_zb_binary_input_cluster_create(&binary_input_cfg);
-        esp_zb_binary_input_cluster_add_attr(esp_zb_binary_input_cluster, ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &present_value);
+        uint16_t present_value = 0;
+        uint16_t divisor = 1000;
+        esp_zb_attribute_list_t *esp_zb_electrical_meas_cluster = esp_zb_electrical_meas_cluster_create(&electrical_meas_cfg);
+        esp_zb_electrical_meas_cluster_add_attr(esp_zb_electrical_meas_cluster, ESP_ZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_DC_VOLTAGE_ID, &present_value);
+        esp_zb_electrical_meas_cluster_add_attr(esp_zb_electrical_meas_cluster, ESP_ZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_DC_VOLTAGE_DIVISOR_ID, &divisor);
 
-        esp_zb_binary_input_clusters[i] = esp_zb_binary_input_cluster;
+        esp_zb_electrical_meas_clusters[i] = esp_zb_electrical_meas_cluster;
     }
 
     // ------------------------------ Create endpoint list ------------------------------
@@ -204,7 +200,7 @@ static void esp_zb_task(void *pvParameters)
 
     for (int i = 0; i < channel_definitions_size; i++) {
         esp_zb_cluster_list_t *esp_zb_cluster_list = esp_zb_zcl_cluster_list_create();
-        esp_zb_cluster_list_add_binary_input_cluster(esp_zb_cluster_list, esp_zb_binary_input_clusters[i], ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
+        esp_zb_cluster_list_add_electrical_meas_cluster(esp_zb_cluster_list, esp_zb_electrical_meas_clusters[i], ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
 
         esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list, channel_definitions[i].endpoint, ESP_ZB_AF_HA_PROFILE_ID, ESP_ZB_HA_CUSTOM_ATTR_DEVICE_ID);
     }
