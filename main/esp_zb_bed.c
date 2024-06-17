@@ -19,7 +19,7 @@ static const uint16_t THRESHOLD = 175;
 
 // Define channels and endpoints here
 channel_definition channel_definitions[] = {{.channel = ADC_CHANNEL_2, .endpoint = ENDPOINT_BED_SIDE1, .threshold = THRESHOLD},
-                                            {.channel = ADC_CHANNEL_3, .endpoint = ENDPOINT_BED_SIDE2, .threshold = THRESHOLD}};
+                                                  {.channel = ADC_CHANNEL_3, .endpoint = ENDPOINT_BED_SIDE2, .threshold = THRESHOLD}};
 
 static const uint8_t channel_definitions_size = sizeof(channel_definitions) / sizeof(channel_definition);
 
@@ -200,13 +200,15 @@ static void esp_zb_task(void *pvParameters)
     esp_zb_cluster_list_add_basic_cluster(esp_zb_cluster_list, esp_zb_basic_cluster, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
     esp_zb_cluster_list_add_identify_cluster(esp_zb_cluster_list, esp_zb_identify_cluster, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
 
-    esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list, ENDPOINT_INIT, ESP_ZB_AF_HA_PROFILE_ID, ESP_ZB_HA_CUSTOM_ATTR_DEVICE_ID);
+    esp_zb_endpoint_config_t endpoint_config = {.endpoint = ENDPOINT_INIT, .app_profile_id = ESP_ZB_AF_HA_PROFILE_ID, .app_device_id = ESP_ZB_HA_CUSTOM_ATTR_DEVICE_ID};
+    esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list, endpoint_config);
 
     for (int i = 0; i < channel_definitions_size; i++) {
         esp_zb_cluster_list_t *esp_zb_cluster_list = esp_zb_zcl_cluster_list_create();
         esp_zb_cluster_list_add_binary_input_cluster(esp_zb_cluster_list, esp_zb_binary_input_clusters[i], ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
 
-        esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list, channel_definitions[i].endpoint, ESP_ZB_AF_HA_PROFILE_ID, ESP_ZB_HA_CUSTOM_ATTR_DEVICE_ID);
+        esp_zb_endpoint_config_t endpoint_config = {.endpoint = channel_definitions[i].endpoint, .app_profile_id = ESP_ZB_AF_HA_PROFILE_ID, .app_device_id = ESP_ZB_HA_CUSTOM_ATTR_DEVICE_ID};
+        esp_zb_ep_list_add_ep(esp_zb_ep_list, esp_zb_cluster_list, endpoint_config);
     }
 
     /* Register device */
