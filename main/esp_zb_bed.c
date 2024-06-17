@@ -4,6 +4,7 @@
 #include "nvs_flash.h"
 #include "esp_zb_bed.h"
 #include "string.h"
+#include "time.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
@@ -19,7 +20,7 @@ static const uint16_t THRESHOLD = 175;
 
 // Define channels and endpoints here
 channel_definition channel_definitions[] = {{.channel = ADC_CHANNEL_2, .endpoint = ENDPOINT_BED_SIDE1, .threshold = THRESHOLD},
-                                                  {.channel = ADC_CHANNEL_3, .endpoint = ENDPOINT_BED_SIDE2, .threshold = THRESHOLD}};
+                                            {.channel = ADC_CHANNEL_3, .endpoint = ENDPOINT_BED_SIDE2, .threshold = THRESHOLD}};
 
 static const uint8_t channel_definitions_size = sizeof(channel_definitions) / sizeof(channel_definition);
 
@@ -76,6 +77,7 @@ void bed_occupancy_task(void *pvParameters)
     for (int i = 0; i < channel_definitions_size; i++) {
         gpio_state[i] = 2;
     }
+    time_t last_report = time(NULL);
 
     int adc_raw[10];
     int voltage[10];
@@ -90,11 +92,14 @@ void bed_occupancy_task(void *pvParameters)
                 // ESP_LOGI(TAG, "Channel[%d] Cali Voltage: %d mV", channel_definitions[i].channel, voltage[0]);
 
                 uint8_t data = voltage[0] > channel_definitions[i].threshold ? 1 : 0;
+                time_t now = time(NULL);
 
-                if (data != gpio_state[i]) {
+                // when data changes, or at least once an hour
+                if (data != gpio_state[i] || difftime(now, last_report) > 3600) {
                     gpio_state[i] = data;
                     reportAttribute(channel_definitions[i].endpoint, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT,
                                     ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &data, sizeof(data));
+                    last_report = now;
                 }
             }
             vTaskDelay(pdMS_TO_TICKS(1000));
