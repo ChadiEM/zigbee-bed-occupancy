@@ -16,7 +16,7 @@ typedef struct channel_definition {
 } channel_definition;
 
 // Voltage threshold for triggering an occupied alert (in mV)
-static const uint16_t THRESHOLD = 175;
+static const uint16_t THRESHOLD = 170;
 
 // Define channels and endpoints here
 channel_definition channel_definitions[] = {{.channel = ADC_CHANNEL_2, .endpoint = ENDPOINT_BED_SIDE1, .threshold = THRESHOLD},
