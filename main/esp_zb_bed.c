@@ -1,10 +1,10 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "esp_check.h"
 #include "nvs_flash.h"
 #include "esp_zb_bed.h"
 #include "string.h"
-#include "time.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
@@ -77,7 +77,7 @@ void bed_occupancy_task(void *pvParameters)
     for (int i = 0; i < channel_definitions_size; i++) {
         gpio_state[i] = 2;
     }
-    time_t last_report = time(NULL);
+    uint16_t unsent_reports = 0;
 
     int adc_raw[10];
     int voltage[10];
@@ -92,15 +92,16 @@ void bed_occupancy_task(void *pvParameters)
                 // ESP_LOGI(TAG, "Channel[%d] Cali Voltage: %d mV", channel_definitions[i].channel, voltage[0]);
 
                 uint8_t data = voltage[0] > channel_definitions[i].threshold ? 1 : 0;
-                time_t now = time(NULL);
 
                 // when data changes, or at least once an hour
-                if (data != gpio_state[i] || difftime(now, last_report) > 3600) {
+                if (data != gpio_state[i] || unsent_reports > 3600) {
                     gpio_state[i] = data;
                     reportAttribute(channel_definitions[i].endpoint, ESP_ZB_ZCL_CLUSTER_ID_BINARY_INPUT,
                                     ESP_ZB_ZCL_ATTR_BINARY_INPUT_PRESENT_VALUE_ID, &data, sizeof(data));
-                    last_report = now;
+                    unsent_reports = 0;
                 }
+
+                unsent_reports++;
             }
             vTaskDelay(pdMS_TO_TICKS(1000));
         }
@@ -110,7 +111,7 @@ void bed_occupancy_task(void *pvParameters)
 /********************* Define functions **************************/
 static void bdb_start_top_level_commissioning_cb(uint8_t mode_mask)
 {
-    ESP_ERROR_CHECK(esp_zb_bdb_start_top_level_commissioning(mode_mask));
+    ESP_RETURN_ON_FALSE(esp_zb_bdb_start_top_level_commissioning(mode_mask) == ESP_OK, , TAG, "Failed to start Zigbee commissioning");
 }
 
 void esp_zb_app_signal_handler(esp_zb_app_signal_t *signal_struct)
@@ -120,12 +121,13 @@ void esp_zb_app_signal_handler(esp_zb_app_signal_t *signal_struct)
     esp_zb_app_signal_type_t sig_type = *p_sg_p;
     switch (sig_type) {
     case ESP_ZB_ZDO_SIGNAL_SKIP_STARTUP:
-        ESP_LOGI(TAG, "Zigbee stack initialized");
+        ESP_LOGI(TAG, "Initialize Zigbee stack");
         esp_zb_bdb_start_top_level_commissioning(ESP_ZB_BDB_MODE_INITIALIZATION);
         break;
     case ESP_ZB_BDB_SIGNAL_DEVICE_FIRST_START:
     case ESP_ZB_BDB_SIGNAL_DEVICE_REBOOT:
         if (err_status == ESP_OK) {
+            ESP_LOGI(TAG, "Device started up in %s factory-reset mode", esp_zb_bdb_is_factory_new() ? "" : "non");
             ESP_LOGI(TAG, "Start network steering");
             esp_zb_bdb_start_top_level_commissioning(ESP_ZB_BDB_MODE_NETWORK_STEERING);
         } else {
@@ -137,10 +139,10 @@ void esp_zb_app_signal_handler(esp_zb_app_signal_t *signal_struct)
         if (err_status == ESP_OK) {
             esp_zb_ieee_addr_t extended_pan_id;
             esp_zb_get_extended_pan_id(extended_pan_id);
-            ESP_LOGI(TAG, "Joined network successfully (Extended PAN ID: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x, PAN ID: 0x%04hx, Channel:%d)",
+            ESP_LOGI(TAG, "Joined network successfully (Extended PAN ID: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x, PAN ID: 0x%04hx, Channel:%d, Short Address: 0x%04hx)",
                      extended_pan_id[7], extended_pan_id[6], extended_pan_id[5], extended_pan_id[4],
                      extended_pan_id[3], extended_pan_id[2], extended_pan_id[1], extended_pan_id[0],
-                     esp_zb_get_pan_id(), esp_zb_get_current_channel());
+                     esp_zb_get_pan_id(), esp_zb_get_current_channel(), esp_zb_get_short_address());
             xTaskCreate(bed_occupancy_task, "bed_occupancy_task", 4096, NULL, 5, NULL);
         } else {
             ESP_LOGI(TAG, "Network steering was not successful (status: %s)", esp_err_to_name(err_status));
