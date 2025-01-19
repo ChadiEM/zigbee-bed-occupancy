@@ -1,4 +1,4 @@
-FROM espressif/idf:v5.3.2
+FROM espressif/idf:v5.4
 
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
